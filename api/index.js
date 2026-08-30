@@ -1,18 +1,19 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
-const Anthropic = require('@anthropic-ai/sdk');
+export default async function handler(req, res) {
+  // CORS headers
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.setHeader('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-const client = new Anthropic();
-
-// Stockage simple en mémoire pour l'instant (Phase 2 on met Supabase)
-let messages = [];
-
-app.post('/api/chat', async (req, res) => {
   const { message } = req.body;
 
   if (!message) {
@@ -20,58 +21,39 @@ app.post('/api/chat', async (req, res) => {
   }
 
   try {
-    // Ajoute le message utilisateur
-    messages.push({
-      role: 'user',
-      content: message
+    const Anthropic = require('@anthropic-ai/sdk');
+    const client = new Anthropic({
+      apiKey: process.env.ANTHROPIC_API_KEY
     });
 
-    // Appelle Claude
     const response = await client.messages.create({
       model: 'claude-opus-4-1',
       max_tokens: 1024,
       system: `Tu t'appelles Donald. Tu es l'assistant personnel de Jo qui gère un restaurant appelé L'Essentiel à Le Pradet.
-      Tu es intelligent, sympathique, direct et efficace. Tu aides Jo avec:
-      - Les emails (Airbnb, Smoobu)
-      - Les factures
-      - La gestion du temps
-      - Les finances
-      - La prospection
-      
-      Sois bref, actionnable, et toujours utile.`,
-      messages: messages
+Tu es intelligent, sympathique, direct et efficace. Tu aides Jo avec:
+- Les emails (Airbnb, Smoobu)
+- Les factures
+- La gestion du temps
+- Les finances
+- La prospection
+
+Sois bref, actionnable, et toujours utile.`,
+      messages: [
+        {
+          role: 'user',
+          content: message
+        }
+      ]
     });
 
     const assistantMessage = response.content[0].text;
-    
-    // Stocke la réponse
-    messages.push({
-      role: 'assistant',
-      content: assistantMessage
-    });
 
-    res.json({
-      message: assistantMessage,
-      history: messages
+    return res.status(200).json({
+      message: assistantMessage
     });
 
   } catch (error) {
     console.error('Claude API error:', error);
-    res.status(500).json({ error: 'Failed to get response from Claude' });
+    return res.status(500).json({ error: 'Failed to get response from Claude', details: error.message });
   }
-});
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', assistant: 'Donald' });
-});
-
-// Serve frontend
-app.use(express.static('public'));
-
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Donald is running on port ${PORT}`);
-});
-
-module.exports = app;
+}
